@@ -1,0 +1,802 @@
+
+let username = prompt("Enter your username: ");
+console.log("Welcome, " + username + "!");
+
+let alive = true;
+let stage = 1;
+let currentFeint = null;
+let playerIsStunned = false;
+let reductionActive = false;
+let scoutDuration = 0;
+
+let playerXP = 0;
+let intelLevel = 1;
+let endlessMode = false;
+
+let mirrorDuration = 0;
+let dynamicEnemyHpPool = 0;
+
+const player = {
+    hp: 50,
+    maxhp: 50,
+    regen: false,
+    moves: {
+        "1": { name: "Dragon Dance", type: "Fire", power: 20, desc: "Unleashes fierce flames. Strong against Earth, weak against Water." },
+        "2": { name: "Falling River", type: "Water", power: 20, desc: "A crashing torrent. Strong against Fire, weak against Earth." },
+        "3": { name: "Conjured Summons", type: "Earth", power: 20, desc: "Constructs solid stone. Strong against Water, weak against Fire." },
+        "4": { name: "Broken Mirror", type: "Neutral", power: 15, desc: "Spatial barrier. Reduces damage by 75% and reflects for 3 turns, but stuns you on setup. Shattered if enemy Attacks on setup turn." },
+        "5": { name: "Rapid Combo", type: "Neutral", power: 15, desc: "Triggers a mutual trade of blows. Vulnerable to enemy Defend strategies, which stun you." }
+    },
+    strategies: {
+        "1": { name: "Analyze", desc: "Leaves you vulnerable this turn. Completely deciphers the environment to reveal the enemy's exact type for the next 2 turns." },
+        "2": { name: "Defend", desc: "Blocks all damage from the enemy's action this turn, but you are stunned next turn and your next attack deals less damage." },
+        "3": { name: "Attack", desc: "Leaves you vulnerable this turn. Set up a feint to trick the enemy into using a specific type next turn." }
+    },
+    items: []
+};
+
+const chapters = {
+    1: {
+        name: "The Ruined Outpost",
+        gruntName: "Zombie grunt",
+        bossName: "Zombie Overlord",
+        lore: "LOG ENTRY 01: The world fell in a single night. They call it the 'Necro-Mutation.' The grunts here are mindless, easily broadcasted by their heavy elemental leaking. I need to keep moving inward.",
+        moves: [{ name: "Flame Breath", type: "Fire" }, { name: "Mud Slap", type: "Earth" }, { name: "Acid Spit", type: "Water" }]
+    },
+    2: {
+        name: "The Sunken Swamps",
+        gruntName: "Bog Lurker",
+        bossName: "Swamp Monstrosity",
+        lore: "LOG ENTRY 02: The air is growing thick. The local mutations are masking their traits under the marsh mud. They are learning to camouflage their elemental build-up. I'm going to have to study their movements manually soon.",
+        moves: [{ name: "Toxic Sludge", type: "Water" }, { name: "Peat Slam", type: "Earth" }, { name: "Ignited Gas", type: "Fire" }]
+    },
+    3: {
+        name: "The Iron Catacombs",
+        gruntName: "Scrap Thrall",
+        bossName: "Forgemaster Golem",
+        lore: "LOG ENTRY 03: Underground now. The specimens here are cold, clinical, and completely contained. No elemental energy is spilling naturally. My eyes won't cut it anymore; I have to drop my guard to strictly Analyze their internal frames.",
+        moves: [{ name: "Rusting Wave", type: "Water" }, { name: "Slag Shot", type: "Fire" }, { name: "Debris Crush", type: "Earth" }]
+    },
+    4: {
+        name: "The Overgrown Spire",
+        gruntName: "Thorn Gazer",
+        bossName: "Spire Heart",
+        lore: "LOG ENTRY 04: Parasitic roots are consuming the stone. The hivemind is directing these actions. They aren't just reacting anymore—they're actively scheming against me.",
+        moves: [{ name: "Solar Beam", type: "Fire" }, { name: "Spore Cloud", type: "Water" }, { name: "Root Impale", type: "Earth" }]
+    },
+    5: {
+        name: "The Frozen Tundra",
+        gruntName: "Frost Shambler",
+        bossName: "Glacial Titan",
+        lore: "LOG ENTRY 05: Absolute zero. The virus seems perfectly preserved and amplified by the cold. Resources are growing scarcer; the safe zones aren't even capable of sealing my wounds anymore.",
+        moves: [{ name: "Ice Spear", type: "Water" }, { name: "Frost Explosion", type: "Fire" }, { name: "Avalanche", type: "Earth" }]
+    },
+    6: {
+        name: "The Desolate Dunes",
+        gruntName: "Sand Horror",
+        bossName: "Dune Emperor",
+        lore: "LOG ENTRY 06: Black sand as far as the eye can see. The mutation is combining organic flesh with raw, mineralized energy. It's beautiful and terrifying.",
+        moves: [{ name: "Searing Heat", type: "Fire" }, { name: "Quicksand Trap", type: "Earth" }, { name: "Mirage Oasis", type: "Water" }]
+    },
+    7: {
+        name: "The Chained Laboratory",
+        gruntName: "Subject Alpha",
+        bossName: "The Amalgam",
+        lore: "LOG ENTRY 07: I found an old research facility. The logs show they were trying to synthesize the virus as a weapon, but the catalyst agent gained sentience first. We did this to ourselves.",
+        moves: [{ name: "Chemical Spill", type: "Water" }, { name: "Incinerator Core", type: "Fire" }, { name: "Concrete Slab", type: "Earth" }]
+    },
+    8: {
+        name: "The Scorched Caldera",
+        gruntName: "Ash Walker",
+        bossName: "Magma Core",
+        lore: "LOG ENTRY 08: The earth is opening up. The virus is consuming the planet's tectonic grid. If I don't stop the heart of this infection soon, there won't be a world left to save.",
+        moves: [{ name: "Lava Burst", type: "Fire" }, { name: "Obsidian Spike", type: "Earth" }, { name: "Boiling Geyser", type: "Water" }]
+    },
+    9: {
+        name: "The Floating Citadel",
+        gruntName: "Void Sentinel",
+        bossName: "Sky Archon",
+        lore: "LOG ENTRY 09: Gravity is failing. I am climbing the final sanctuary where the primary virus source took root. The terminal ahead points to a localized epicenter. This is the end of the line.",
+        moves: [{ name: "Plasma Discharge", type: "Fire" }, { name: "Meteor Rain", type: "Earth" }, { name: "Ion Storm", type: "Water" }]
+    },
+    10: {
+        name: "The Primordial Core",
+        gruntName: "Eldritch Echo",
+        bossName: "THE PATIENT ZERO",
+        lore: "LOG ENTRY 10: I am standing before it. The original host. It is an amalgamation of all elements, shifting fluidly without warning. If I die here, the cycle repeats forever. Everything rides on this stance.",
+        moves: [{ name: "Genesis Flare", type: "Fire" }, { name: "Cataclysm", type: "Earth" }, { name: "Oblivion Deluge", type: "Water" }]
+    }
+};
+
+const environments = [
+    { text: "The air feels blistering hot and sparks fly from the enemy's mouth.", likely: "Fire" },
+    { text: "The ground begins to muddy and the enemy starts ripping up chunks of earth.", likely: "Earth" },
+    { text: "A humid mist settles in and the enemy is dripping with strange fluids.", likely: "Water" }
+];
+
+function getChapterNumber(stg) {
+    if (endlessMode) return 10;
+    return Math.floor((stg - 1) / 5) + 1;
+}
+
+function generateEnemy(stg) {
+    let chapNum = getChapterNumber(stg);
+    let chap = chapters[chapNum] || chapters[10];
+    
+    let isBoss = (stg % 5 === 0);
+    let effectiveStage = stg;
+    
+    if (!endlessMode) {
+        if (stg % 5 === 1 && stg > 1) {
+            effectiveStage = Math.max(1, stg - 2);
+        }
+    }
+    
+    let baseHp = isBoss ? 100 : 40 + (effectiveStage * 12);
+    let baseAtk = isBoss ? 16 : 8 + (effectiveStage * 2);
+    
+    if (chapNum > 1 || endlessMode) {
+        let factor = endlessMode ? (stg * 0.15) : ((chapNum - 1) * 0.20);
+        baseHp = Math.floor(baseHp * (1 + factor));
+        baseAtk = Math.floor(baseAtk * (1 + (factor * 0.75)));
+    }
+    
+    baseHp += dynamicEnemyHpPool;
+    
+    let name = isBoss ? chap.bossName : chap.gruntName;
+    if (endlessMode) name = "[ENDLESS] " + name;
+    
+    return {
+        name: name,
+        hp: baseHp,
+        maxhp: baseHp,
+        attack: baseAtk,
+        moves: chap.moves,
+        strategies: [
+            { name: "Analyze" },
+            { name: "Defend" },
+            { name: "Attack" }
+        ]
+    };
+}
+
+let enemy = generateEnemy(stage);
+let zombieNextFeint = null;
+let zombieStunned = false;
+let zombieReduction = false;
+let zombieScoutDuration = 0;
+let bossEnraged = false;
+
+console.log("\n================ PROLOGUE ================");
+console.log(chapters[1].lore);
+alert("Press OK to begin your journey...");
+
+while (alive) {
+    let currentChapNum = getChapterNumber(stage);
+    let currentChap = chapters[currentChapNum] || chapters[10];
+    let isBossFight = (stage % 5 === 0);
+
+    console.log(`\n================ CHAPTER ${currentChapNum}: ${currentChap.name} ================`);
+    console.log(`STAGE ${stage} | Your HP: ${player.hp}/${player.maxhp} | ${enemy.name} HP: ${enemy.hp}/${enemy.maxhp} | XP: ${playerXP}`);
+    if (mirrorDuration > 0) console.log(`🔮 SPATIAL DEFLECTION ACTIVE: ${mirrorDuration} turns remaining (Tanking 25% damage, reflecting attacks).`);
+    if (bossEnraged) console.log("🔥 BOSS STATUS: ENRAGED! Danger level critical!");
+    console.log("-----------------------------------------");
+
+    if (isBossFight && enemy.hp <= enemy.maxhp * 0.5 && !bossEnraged) {
+        bossEnraged = true;
+        enemy.attack += 6;
+        console.log(`\n💢 THE ${enemy.name.toUpperCase()} ROARS IN RAGE! Its attack power increased!`);
+    }
+
+    let envIndex = Math.floor(Math.random() * environments.length);
+    let currentEnv = environments[envIndex];
+    
+    let zombieMoveType = currentEnv.likely;
+    let environmentIsAccurate = Math.random() < 0.75;
+
+    let strategyChance = 0.25 + (stage * 0.04);
+    if (bossEnraged) strategyChance = 0.60;
+
+    if (stage >= 2 && Math.random() < 0.35 + (stage * 0.05) && zombieNextFeint) {
+        zombieMoveType = zombieNextFeint;
+        zombieNextFeint = null;
+    } else if (stage >= 3 && Math.random() < 0.4 && !zombieNextFeint) {
+        let wrongTypes = ["Fire", "Water", "Earth"].filter(t => t !== currentEnv.likely);
+        zombieMoveType = wrongTypes[Math.floor(Math.random() * wrongTypes.length)];
+    }
+
+    if (currentFeint) {
+        zombieMoveType = currentFeint;
+    }
+
+    let matchingMoves = enemy.moves.filter(m => m.type === zombieMoveType);
+    let zombieMove = matchingMoves[0];
+
+    let zombieAction = "Move";
+    let zombieChosenStrat = null;
+
+    if (zombieStunned) {
+        zombieAction = "Stunned";
+        zombieStunned = false;
+    } else if (stage >= 2 && Math.random() < strategyChance) {
+        zombieAction = "Strategy";
+        let stratIndex = Math.floor(Math.random() * enemy.strategies.length);
+        zombieChosenStrat = enemy.strategies[stratIndex];
+        if (bossEnraged && zombieChosenStrat.name === "Defend" && Math.random() < 0.5) {
+            zombieChosenStrat = enemy.strategies[2]; 
+        }
+    }
+
+    console.log(`\nENVIRONMENTAL NOTICE:`);
+    if (currentChapNum === 1) {
+        console.log(currentEnv.text);
+    } else if (currentChapNum === 2) {
+        let subtleText = currentEnv.text.split(" and ")[0] + "...";
+        console.log(subtleText);
+    } else {
+        console.log(`The ${enemy.name} completely masks its presence. The atmosphere is totally dead.`);
+    }
+    
+    if (scoutDuration > 0) {
+        if (zombieAction === "Strategy") {
+            console.log(`👁️ [ANALYZE ACTIVE]: You see right through the foe. It is plotting a Strategy: [${zombieChosenStrat.name}].`);
+        } else {
+            console.log(`👁️ [ANALYZE ACTIVE]: You see right through the foe. It is planning an Attack: [${zombieMove.type}].`);
+        }
+    } else {
+        if (currentChapNum === 2) {
+            console.log("⚠️ The enemy is adapting. Natural environment tells are fading out.");
+        } else if (currentChapNum >= 3) {
+            console.log("⚠️ No indicators remain! You must rely on ANALYZE to uncover its movements.");
+        } else if (!environmentIsAccurate) {
+            console.log("⚠️ Residual elemental signs seem distorted... The environment might be lying.");
+        }
+    }
+
+    let actionTaken = "None";
+    let chosenMove = null;
+    let playerUsedDefend = false;
+    let playerFeintTarget = null;
+
+    if (playerIsStunned) {
+        console.log("\n🌀 You are STUNNED and cannot act this turn.");
+        playerIsStunned = false;
+        actionTaken = "Stunned";
+    } else {
+        let turnInput = prompt("What will you do? (Move / Strategy / Item): ");
+        if (turnInput === null) continue;
+        let turn = turnInput.trim().toLowerCase();
+
+        if (turn === "strategy" || turn === "s") {
+            console.log(`\nAvailable Strategies:`);
+            for (let key in player.strategies) {
+                console.log(`${key}. ${player.strategies[key].name} - ${player.strategies[key].desc}`);
+            }
+            
+            let stratChoice = prompt("Select a strategy number (or type 'back'): ");
+            if (stratChoice === null) continue;
+            stratChoice = stratChoice.trim().toLowerCase();
+            if (stratChoice === "back" || stratChoice === "b") continue;
+            
+            let chosenStrat = player.strategies[stratChoice];
+            if (!chosenStrat) {
+                console.log("Invalid strategy! You fumbled your setup.");
+                continue;
+            }
+
+            console.log(`\n--- STRATEGY CONFIRMATION ---`);
+            console.log(`Name: ${chosenStrat.name}`);
+            console.log(`Description: ${chosenStrat.desc}`);
+            let confirmStrat = prompt("Confirm strategy use? (yes/no): ");
+            if (confirmStrat === null) confirmStrat = "no";
+            confirmStrat = confirmStrat.trim().toLowerCase();
+            
+            if (confirmStrat !== "yes" && confirmStrat !== "y") {
+                continue;
+            }
+
+            actionTaken = "Strategy";
+
+            if (chosenStrat.name === "Analyze") {
+                scoutDuration = (intelLevel >= 2) ? 4 : 3;
+                console.log("👁️ Strategy executed! You drop your stance to study the enemy's patterns.");
+            } 
+            else if (chosenStrat.name === "Defend") {
+                playerUsedDefend = true;
+                playerIsStunned = true;
+                reductionActive = true;
+                console.log("🛡️ Strategy executed! You brace yourself completely to absorb the next attack.");
+            } 
+            else if (chosenStrat.name === "Attack") {
+                console.log("\nWhat fake environmental sign do you want to create for next turn?");
+                console.log("1. Ignite a sudden brushfire (Tricks enemy into using Earth next turn)");
+                console.log("2. Flood the immediate footing (Tricks enemy into using Fire next turn)");
+                console.log("3. Kick up a massive dust cloud (Tricks enemy into using Water next turn)");
+                let feintChoice = prompt("Choose your feint setup: ");
+                if (feintChoice === null) feintChoice = "";
+                feintChoice = feintChoice.trim();
+                
+                if (feintChoice === "1") playerFeintTarget = "Earth";
+                else if (feintChoice === "2") playerFeintTarget = "Fire";
+                else if (feintChoice === "3") playerFeintTarget = "Water";
+                
+                console.log("💨 Strategy executed! You drop your guard to set up an elemental feint.");
+            }
+            else if (chosenStrat.name === "Counter-Strike") {
+                playerUsedDefend = true;
+                reductionActive = false;
+                console.log("⚡ Strategy executed! You enter a flawless counter stance. Block hit, no stun penalty!");
+            }
+
+        } else if (turn === "item" || turn === "i") {
+            if (player.items.length === 0) {
+                console.log("Your inventory is empty! Visit the shop every 5 waves to stock up.");
+                continue;
+            }
+            console.log(`\nAvailable Items:`);
+            for (let i = 0; i < player.items.length; i++) {
+                console.log(`${i + 1}. ${player.items[i].name} - ${player.items[i].desc}`);
+            }
+
+            let itemChoice = prompt("Select an item number (or type 'back'): ");
+            if (itemChoice === null) continue;
+            itemChoice = itemChoice.trim().toLowerCase();
+            if (itemChoice === "back" || itemChoice === "b") continue;
+
+            let itemIdx = parseInt(itemChoice) - 1;
+            let chosenItem = player.items[itemIdx];
+            if (!chosenItem) {
+                console.log("Invalid item choice!");
+                continue;
+            }
+
+            console.log(`\n--- ITEM CONFIRMATION ---`);
+            console.log(`Name: ${chosenItem.name}`);
+            console.log(`Description: ${chosenItem.desc}`);
+            let confirmItem = prompt("Confirm item use? (yes/no): ");
+            if (confirmItem === null) confirmItem = "no";
+            confirmItem = confirmItem.trim().toLowerCase();
+            
+            if (confirmItem !== "yes" && confirmItem !== "y") {
+                continue;
+            }
+
+            actionTaken = "Item";
+
+            if (chosenItem.name === "Cookie") {
+                if (player.hp >= player.maxhp) {
+                    console.log("You are already at full health! Cookie wasted.");
+                } else {
+                    player.regen = true;
+                    console.log("🍪 You ate a Cookie! Health regeneration is now active.");
+                }
+            } else if (chosenItem.name === "Bandage") {
+                player.hp += 10;
+                if (player.hp > player.maxhp) player.hp = player.maxhp;
+                console.log(`🩹 Restored 10 HP. Current HP: ${player.hp}/${player.maxhp}`);
+            }
+            
+            player.items.splice(itemIdx, 1);
+
+        } else if (turn === "move" || turn === "m") {
+            console.log(`\nAvailable Actions:`);
+            for (let key in player.moves) {
+                console.log(`${key}. ${player.moves[key].name} [${player.moves[key].type}] (Power: ${player.moves[key].power})`);
+            }
+
+            let choice = prompt("Select an action number (or type 'back'): ");
+            if (choice === null) continue;
+            choice = choice.trim().toLowerCase();
+            if (choice === "back" || choice === "b") continue;
+
+            chosenMove = player.moves[choice];
+            if (!chosenMove) {
+                console.log("Invalid selection! You hesitated and missed your turn.");
+                continue;
+            }
+
+            console.log(`\n--- MOVE DETAILS ---`);
+            console.log(`Name: ${chosenMove.name}`);
+            console.log(`Type: ${chosenMove.type}`);
+            console.log(`Description: ${chosenMove.desc}`);
+            
+            let confirm = prompt("Are you sure you want to use this move? (yes/no): ");
+            if (confirm === null) confirm = "no";
+            confirm = confirm.trim().toLowerCase();
+            if (confirm !== "yes" && confirm !== "y") {
+                continue;
+            }
+
+            actionTaken = "Move";
+        } else {
+            console.log("Command not recognized. Please use 'move', 'strategy', or 'item'.");
+            continue;
+        }
+    }
+
+    let zombieUsedDefend = false;
+    if (zombieAction === "Strategy") {
+        console.log(`\n--- ENEMY STRATEGY ---`);
+        console.log(`The ${enemy.name} chose Strategy: [${zombieChosenStrat.name}]`);
+        
+        if (zombieChosenStrat.name === "Analyze") {
+            zombieScoutDuration = 3;
+            console.log(`👁️ The ${enemy.name} drops its guard to analyze your fighting rhythm!`);
+        } 
+        else if (zombieChosenStrat.name === "Defend") {
+            zombieUsedDefend = true;
+            zombieStunned = true;
+            zombieReduction = true;
+            console.log(`🛡️ The ${enemy.name} huddles up and guards defensively against any offensive manipulation!`);
+        } 
+        else if (zombieChosenStrat.name === "Attack") {
+            let types = ["Fire", "Water", "Earth"];
+            zombieNextFeint = types[Math.floor(Math.random() * types.length)];
+            console.log(`💨 The ${enemy.name} moves erratically, setting up a deceptive environment feint for next turn.`);
+        }
+    } else if (zombieAction === "Stunned") {
+        console.log(`\n🌀 The ${enemy.name} is STUNNED from its previous Defend and cannot act!`);
+    } else if (zombieAction === "Move") {
+        console.log(`\n--- ENEMY ATTACK ---`);
+        console.log(`The ${enemy.name} lunges to execute [${zombieMove.name}] (${zombieMove.type})`);
+    }
+
+    if (playerFeintTarget) {
+        if (zombieUsedDefend) {
+            console.log(`\n❌ FEINT SHUTDOWN! The ${enemy.name}'s Defend completely blocked your environment manipulation. The feint failed!`);
+            currentFeint = null;
+        } else {
+            currentFeint = playerFeintTarget;
+        }
+    } else {
+        currentFeint = null;
+    }
+
+    console.log(`\n--- RESOLUTION ---`);
+
+    let rawRoll = Math.random();
+    let rngModifier = 1.0;
+    let rngLabel = "";
+    if (rawRoll < 0.10) {
+        rngModifier = 1.5;
+        rngLabel = " ⭐ CRITICAL HIT! ⭐";
+    } else if (rawRoll > 0.90) {
+        rngModifier = 0.5;
+        rngLabel = " 💢 FLUBBED HIT! 💢";
+    }
+
+    let enemyOverpowers = false;
+    if (actionTaken === "Move" && zombieAction === "Move") {
+        if (enemy.attack >= (chosenMove.power * 2)) {
+            enemyOverpowers = true;
+        }
+    }
+
+    if (actionTaken === "Move" && chosenMove.name === "Broken Mirror") {
+        if (zombieAction === "Strategy" && zombieChosenStrat.name === "Attack") {
+            console.log("❌ SHATTERED! You attempted to deploy Broken Mirror, but the enemy executed an Attack setup on the exact same turn, shattering the mirror instantly!");
+            mirrorDuration = 0;
+        } else {
+            console.log("🔮 Spatial anomaly initialized! Broken Mirror deployed. You are stunned this turn, but you tank only 25% damage and automatically reflect incoming attacks for 3 turns!");
+            mirrorDuration = 3;
+            playerIsStunned = true;
+            
+            if (zombieAction === "Move") {
+                let damageTaken = Math.floor(enemy.attack * 0.25);
+                player.hp -= damageTaken;
+                enemy.hp -= enemy.attack;
+                console.log(`[MIRROR REFLECTION]: You tanked 25% damage (${damageTaken} damage). The barrier fully reflected ${enemy.attack} damage straight back into the ${enemy.name}!`);
+            }
+        }
+    }
+    else if (actionTaken === "Move" && chosenMove.name === "Rapid Combo") {
+        if (zombieAction === "Strategy" && zombieChosenStrat.name === "Defend") {
+            let recoil = Math.floor(chosenMove.power * 0.25);
+            player.hp -= recoil;
+            playerIsStunned = true;
+            console.log(`🛡️ BLOCKED AND PUNISHED! The enemy predicted your onslaught with a perfect Defend strategy. Your Rapid Combo crashed against their guard, dealing 0 damage, dealing ${recoil} recoil damage to you, and STUNNING you next turn!`);
+        } else {
+            let damageDealt = Math.floor(chosenMove.power * rngModifier);
+            if (reductionActive) {
+                let penalty = (intelLevel >= 3) ? 0.10 : 0.25;
+                damageDealt = Math.floor(damageDealt * (1 - penalty));
+                reductionActive = false;
+            }
+            enemy.hp -= damageDealt;
+            console.log(`⚔️ RAPID COMBO EXECUTED! You exchange reckless, simultaneous attacks! You struck the enemy for ${damageDealt} damage!${rngLabel}`);
+            
+            if (zombieAction === "Move") {
+                let enemyDamage = enemy.attack;
+                if (mirrorDuration > 0) {
+                    let tanked = Math.floor(enemyDamage * 0.25);
+                    player.hp -= tanked;
+                    enemy.hp -= enemyDamage;
+                    console.log(`[MIRROR ACTIVE]: You tanked 25% of the combo trade (${tanked} damage) and reflected ${enemyDamage} damage back.`);
+                } else {
+                    player.hp -= enemyDamage;
+                    console.log(`The ${enemy.name} struck you back in the trade for ${enemyDamage} damage!`);
+                }
+            } else {
+                console.log(`The enemy was in a setup turn and couldn't strike back.`);
+            }
+        }
+    }
+    else if (enemyOverpowers) {
+        let finalDmg = Math.floor(enemy.attack * rngModifier);
+        if (mirrorDuration > 0) {
+            let tanked = Math.floor(finalDmg * 0.25);
+            player.hp -= tanked;
+            enemy.hp -= finalDmg;
+            console.log(`💀 RAW POWER OVERRIDE! The ${enemy.name}'s attack power is double or more than your move's power! It brutally overpowers your stance, completely ignoring elemental rules!${rngLabel}`);
+            console.log(`[MIRROR ACTIVE]: You tanked 25% (${tanked} damage) and reflected ${finalDmg} back.`);
+        } else {
+            player.hp -= finalDmg;
+            console.log(`💀 RAW POWER OVERRIDE! The ${enemy.name}'s attack power is double or more than your move's power! It brutally overpowers your stance, completely ignoring elemental rules!${rngLabel}`);
+            console.log(`You took a devastating ${finalDmg} damage!`);
+        }
+    }
+    else if (mirrorDuration > 0 && zombieAction === "Move" && actionTaken !== "Move") {
+        let defDmg = Math.floor(enemy.attack * 0.25);
+        player.hp -= defDmg;
+        enemy.hp -= enemy.attack;
+        console.log(`🔮 [MIRROR AUTOMATIC REFLECTION]: The enemy lunged. You tanked only 25% (${defDmg} damage) and reflected ${enemy.attack} damage directly back!`);
+    }
+    else if (playerUsedDefend && zombieUsedDefend) {
+        console.log("🛡️ Both sides defended! A tense standoff occurs, resulting in total silence.");
+    } 
+    else if (playerUsedDefend) {
+        if (zombieAction === "Move") {
+            console.log(`🛡️ PERFECT BLOCK! You absorbed the enemy's [${zombieMove.name}] completely! Damage taken: 0.`);
+        } else {
+            console.log("🛡️ You guarded heavily, but the enemy was busy setting up a Strategy instead of attacking.");
+        }
+    } 
+    else if (zombieUsedDefend) {
+        if (actionTaken === "Move") {
+            console.log(`🛡️ ENEMY BLOCK! The foe fully braced and absorbed your [${chosenMove.name}]! Damage dealt: 0.`);
+        } else {
+            console.log("🛡️ The enemy defended heavily, but you were busy setting up a tactical option instead of attacking.");
+        }
+    } 
+    else {
+        if (actionTaken === "Stunned" || actionTaken === "Strategy" || actionTaken === "Item") {
+            if (zombieAction === "Move") {
+                console.log(`💥 VULNERABLE! You were unable to defend as the enemy landed a clean blow.`);
+                player.hp -= enemy.attack;
+                console.log(`You took ${enemy.attack} damage!`);
+            } else if (zombieAction === "Stunned" || zombieAction === "Strategy") {
+                console.log("💤 Neither side launched an attack. Both are adjusting their layouts.");
+            }
+        } 
+        else if (actionTaken === "Move") {
+            if (zombieAction === "Stunned" || zombieAction === "Strategy") {
+                console.log(`🔥 STRATEGIC CRITICAL HIT! You caught the enemy wide open during its setup turn!`);
+                let damageDealt = Math.floor(chosenMove.power * 1.5 * rngModifier); 
+                if (reductionActive) {
+                    let penalty = (intelLevel >= 3) ? 0.10 : 0.25;
+                    damageDealt = Math.floor(damageDealt * (1 - penalty));
+                    reductionActive = false;
+                    console.log(`🌀 Stun Aftereffect: Attack power was reduced slightly.`);
+                }
+                enemy.hp -= damageDealt;
+                console.log(`The ${enemy.name} took a punishing ${damageDealt} damage!${rngLabel}`);
+            } 
+            else if (zombieAction === "Move") {
+                if (chosenMove.type === "Neutral") {
+                    console.log(`⚔️ Pure Physical Clash! You trade heavy kinetic impacts evenly.`);
+                    let damageDealt = Math.floor(chosenMove.power * rngModifier);
+                    if (reductionActive) {
+                        let penalty = (intelLevel >= 3) ? 0.10 : 0.25;
+                        damageDealt = Math.floor(damageDealt * (1 - penalty));
+                        reductionActive = false;
+                    }
+                    enemy.hp -= damageDealt;
+                    player.hp -= Math.floor(enemy.attack / 2);
+                    console.log(`The ${enemy.name} took ${damageDealt} damage! You took ${Math.floor(enemy.attack / 2)} recoil damage!${rngLabel}`);
+                }
+                else if (chosenMove.type === zombieMove.type) {
+                    if (chosenMove.type === "Fire") console.log("💨 Exploding Fire! Intense heat collides, filling the area with blinding smoke! (No damage)");
+                    else if (chosenMove.type === "Water") console.log("💦 Colliding Oceans! Torrents splash together, creating a beautiful wall of mist! (No damage)");
+                    else if (chosenMove.type === "Earth") console.log("🪨 Shattered Pillars! Rock crashes into rock, showering the arena with dust! (No damage)");
+                } 
+                else if (
+                    (chosenMove.type === "Fire" && zombieMove.type === "Earth") ||
+                    (chosenMove.type === "Water" && zombieMove.type === "Fire") ||
+                    (chosenMove.type === "Earth" && zombieMove.type === "Water")
+                ) {
+                    console.log(`🔥 ELEMENTAL OVERPOWER! Your ${chosenMove.type} tore straight through their ${zombieMove.type}!`);
+                    let damageDealt = Math.floor(chosenMove.power * rngModifier);
+                    if (reductionActive) {
+                        let penalty = (intelLevel >= 3) ? 0.10 : 0.25;
+                        damageDealt = Math.floor(damageDealt * (1 - penalty));
+                        reductionActive = false;
+                    }
+                    enemy.hp -= damageDealt;
+                    console.log(`The ${enemy.name} took ${damageDealt} damage!${rngLabel}`);
+                } 
+                else {
+                    console.log(`❌ ELEMENTAL COUNTERED! The enemy's ${zombieMove.type} completely engulfed your ${chosenMove.type}!`);
+                    let finalDamage = Math.floor(enemy.attack * rngModifier);
+                    if (zombieReduction) {
+                        finalDamage = Math.floor(finalDamage * 0.75);
+                        zombieReduction = false;
+                        console.log(`🌀 Enemy Stun Aftereffect: The ${enemy.name}'s attack power was reduced by 25%.`);
+                    }
+                    player.hp -= finalDamage;
+                    console.log(`You took ${finalDamage} damage!${rngLabel}`);
+                }
+            }
+        }
+    }
+
+    if (zombieAction !== "Strategy") {
+        zombieReduction = false;
+    }
+
+    if (scoutDuration > 0) scoutDuration--;
+    if (zombieScoutDuration > 0) zombieScoutDuration--;
+    if (mirrorDuration > 0) mirrorDuration--;
+
+    if (player.regen && player.hp > 0) {
+        if (player.hp < player.maxhp) {
+            player.hp += 5;
+            if (player.hp > player.maxhp) player.hp = player.maxhp;
+            console.log(`✨ Cookie Effect: Regenerated 5 HP! (${player.hp}/${player.maxhp})`);
+        }
+        if (player.hp === player.maxhp) {
+            console.log("💚 Full health reached! Cookie effect finished.");
+            player.regen = false;
+        }
+    }
+
+    if (player.hp <= 0) {
+        console.log(`\n💀 GAME OVER! You fell on Stage ${stage}.`);
+        console.log(`Final Score: You cleared ${stage - 1} stages!`);
+        alive = false;
+        break;
+    }
+
+    if (enemy.hp <= 0) {
+        let earnedXP = 15 + (stage * 5);
+        playerXP += earnedXP;
+        console.log(`\n🎉 You defeated the ${enemy.name} on Stage ${stage}!`);
+        console.log(`✨ Gained +${earnedXP} XP! Total XP: ${playerXP}`);
+        
+        playerIsStunned = false;
+        reductionActive = false;
+        scoutDuration = 0;
+        zombieStunned = false;
+        zombieReduction = false;
+        zombieScoutDuration = 0;
+        zombieNextFeint = null;
+        bossEnraged = false;
+        mirrorDuration = 0;
+
+        let randomHpBoost = Math.floor(Math.random() * 4) + 2; 
+        dynamicEnemyHpPool += randomHpBoost;
+        console.log(`📈 Adaptive Strain: Mutation indexes increased. Future host health pool elevated by +${randomHpBoost} HP.`);
+
+        if (stage === 50 && !endlessMode) {
+            console.log("\n🏆 ================= WORLD CLEAR ================= 🏆");
+            console.log("Patient Zero has been expunged. The atmosphere returns to equilibrium.");
+            console.log("You have saved what remains of humanity.");
+            let decision = prompt("Do you want to finish here and win, or enter ENDLESS MODE? (finish/endless): ");
+            if (decision === null) decision = "finish";
+            decision = decision.trim().toLowerCase();
+            
+            if (decision === "finish" || decision === "f") {
+                console.log(`\nThank you for playing! Final clean run score: Stage 50 reached with ${playerXP} XP.`);
+                alive = false;
+                break;
+            } else {
+                endlessMode = true;
+                console.log("\n♾️ WARNING: Entering Endless Mode. Difficulty scales infinitely from this point forward.");
+            }
+        }
+
+        if (stage % 5 === 0) {
+            if (currentChapNum === 1) {
+                player.hp = player.maxhp;
+                console.log("\n⚕️ Shop Auto-Heal: Restored 100% health after clearing Chapter 1.");
+            } else if (currentChapNum === 2) {
+                player.hp = Math.min(player.maxhp, player.hp + Math.floor(player.maxhp * 0.5));
+                console.log("\n⚕️ Shop Auto-Heal: Restored 50% health. The atmosphere is turning hostile.");
+            } else {
+                console.log("\n⚕️ Shop Auto-Heal: 0% Restored. The plague corrupts local environments completely. No automatic healing allowed.");
+            }
+            player.regen = false;
+
+            alert("Chapter Wave cleared! Entering safe zone Shop zone...");
+
+            console.log(`\n================ SHOP INTERMISSION ================\nWelcome back to safety. Spend your currency to modify your build parameters.`);
+            let shopping = true;
+            while (shopping) {
+                console.log(`\n--- SHOP MANUAL (XP Balance: ${playerXP}) ---`);
+                console.log(`1. Upgrade Intelligence [Level ${intelLevel}] (Cost: 40 XP)`);
+                console.log(`2. Buy Cookie [Regen item] (Cost: 15 XP)`);
+                console.log(`3. Buy Bandage [Instant 10 HP heal] (Cost: 10 XP)`);
+                console.log(`4. Upgrade Max HP (+15 Max HP) (Cost: 25 XP)`);
+                console.log(`5. Train Move Damage (+4 power to all moves) (Cost: 30 XP)`);
+                console.log(`6. Depart on next Campaign Wave`);
+                
+                let shopChoice = prompt("Select a shop option number: ");
+                if (shopChoice === null) shopChoice = "6";
+                let choice = shopChoice.trim().toLowerCase();
+                
+                if (choice === "1") {
+                    if (playerXP >= 40) {
+                        playerXP -= 40;
+                        intelLevel++;
+                        console.log(`🧠 Intelligence upgraded to Level ${intelLevel}!`);
+                        if (intelLevel === 2) {
+                            player.strategies["1"].desc = "Leaves you vulnerable. Deciphers exact enemy actions flawlessly for 3 full turns instead of 2.";
+                            console.log("-> Upgrade Unlocked: Analyze tracking length increased!");
+                        } else if (intelLevel === 3) {
+                            player.strategies["2"].desc = "Blocks all incoming damage this turn. Stun recovery damage reduction penalty mitigated down to only 10%.";
+                            console.log("-> Upgrade Unlocked: Defend stun penalty highly mitigated!");
+                        } else if (intelLevel === 4) {
+                            player.strategies["4"] = { name: "Counter-Strike", desc: "Completely parries an attacking enemy without receiving next-turn stun penalties." };
+                            console.log("-> Upgrade Unlocked: Master Strategy Added: [Counter-Strike] unlocked!");
+                        }
+                    } else {
+                        console.log("Insufficient XP!");
+                    }
+                } else if (choice === "2") {
+                    if (playerXP >= 15) {
+                        playerXP -= 15;
+                        player.items.push({ name: "Cookie", desc: "Grants 5 HP regeneration every turn until full health." });
+                        console.log("🍪 Cookie added to your stash.");
+                    } else {
+                        console.log("Insufficient XP!");
+                    }
+                } else if (choice === "3") {
+                    if (playerXP >= 10) {
+                        playerXP -= 10;
+                        player.items.push({ name: "Bandage", desc: "Instantly restores 10 HP." });
+                        console.log("🩹 Bandage added to your stash.");
+                    } else {
+                        console.log("Insufficient XP!");
+                    }
+                } else if (choice === "4") {
+                    if (playerXP >= 25) {
+                        playerXP -= 25;
+                        player.maxhp += 15;
+                        player.hp += 15;
+                        console.log(`❤️ Max HP upgrade complete! Current Max HP: ${player.maxhp}`);
+                    } else {
+                        console.log("Insufficient XP!");
+                    }
+                } else if (choice === "5") {
+                    if (playerXP >= 30) {
+                        playerXP -= 30;
+                        for (let k in player.moves) {
+                            player.moves[k].power += 4;
+                        }
+                        console.log("⚔️ Combat modules trained! All moves permanent power boosted by +4.");
+                    } else {
+                        console.log("Insufficient XP!");
+                    }
+                } else if (choice === "6" || choice === "depart" || choice === "") {
+                    shopping = false;
+                    console.log("Stepping out of shop safety...");
+                }
+            }
+        }
+
+        stage++;
+        enemy = generateEnemy(stage);
+        
+        if (stage % 5 === 1 && !endlessMode) {
+            let nextChapNum = getChapterNumber(stage);
+            if (chapters[nextChapNum]) {
+                alert(`Preparing transmission... Chapter ${nextChapNum} loaded.`);
+                console.log(`\n================ NEW LORE UNLOCKED ================`);
+                console.log(chapters[nextChapNum].lore);
+                console.log(`===================================================`);
+            }
+        }
+        
+        console.log(`\n⚠️ Stage loaded. Engaging target environment.`);
+        continue;
+    }
+}
